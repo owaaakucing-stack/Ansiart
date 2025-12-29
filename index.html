@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FCM ASCII / ANSI Studio</title>
+
+<style>
+:root{
+    --glass:rgba(0,0,0,.6);
+    --border:rgba(255,255,255,.2);
+    --glow:0 0 30px rgba(255,255,255,.15);
+}
+*{box-sizing:border-box}
+body{
+    margin:0;
+    min-height:100vh;
+    background:url('https://i.ibb.co/ZR76WKMX/bg.jpg') center/cover fixed no-repeat;
+    font-family:'Segoe UI',system-ui;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+.overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.6);
+}
+.card{
+    position:relative;
+    z-index:2;
+    width:95%;
+    max-width:680px;
+    background:var(--glass);
+    backdrop-filter:blur(14px);
+    border:1px solid var(--border);
+    border-radius:26px;
+    padding:26px;
+    color:white;
+    box-shadow:var(--glow);
+    animation:fade .6s ease;
+}
+@keyframes fade{from{opacity:0;transform:scale(.95)}}
+.logo{
+    text-align:center;
+    font-size:28px;
+    font-weight:800;
+    letter-spacing:4px;
+}
+.sub{
+    text-align:center;
+    opacity:.8;
+    font-size:13px;
+    margin-bottom:20px;
+}
+input,select,textarea{
+    width:100%;
+    padding:14px 16px;
+    border-radius:16px;
+    background:rgba(0,0,0,.55);
+    border:1px solid var(--border);
+    color:white;
+    margin-bottom:10px;
+}
+textarea{
+    min-height:220px;
+    font-family:Consolas,monospace;
+    white-space:pre;
+}
+button{
+    width:100%;
+    padding:14px;
+    border-radius:999px;
+    border:1px solid var(--border);
+    background:rgba(0,0,0,.75);
+    color:white;
+    font-weight:700;
+    cursor:pointer;
+    transition:.25s;
+}
+button:hover{background:rgba(255,255,255,.18);transform:scale(1.04)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.small{font-size:12px;opacity:.8;text-align:center}
+.logout{background:rgba(180,0,0,.6)}
+.copy{background:rgba(0,120,255,.5)}
+.export{background:rgba(0,180,120,.5)}
+.range{accent-color:white}
+.preview{
+    width:100%;
+    border-radius:16px;
+    margin-bottom:10px;
+    display:none;
+}
+.loader{
+    text-align:center;
+    display:none;
+    margin:10px 0;
+}
+</style>
+</head>
+
+<body>
+<div class="overlay"></div>
+
+<!-- LOGIN -->
+<div class="card" id="loginBox">
+    <div class="logo">FCM</div>
+    <div class="sub">Modern ASCII / ANSI Generator</div>
+
+    <input id="user" placeholder="Username">
+    <input id="pass" type="password" placeholder="Password">
+
+    <button onclick="login()">Login</button>
+    <div class="small" onclick="register()" style="cursor:pointer">Buat akun baru</div>
+</div>
+
+<!-- TOOLS -->
+<div class="card" id="toolBox" style="display:none">
+    <div class="logo">FCM STUDIO</div>
+    <div class="sub">Image ➜ ASCII / ANSI Art</div>
+
+    <input type="file" id="imgInput" accept="image/*">
+    <img id="preview" class="preview">
+
+    <label class="small">Resolusi ASCII</label>
+    <input type="range" id="res" class="range" min="60" max="200" value="120">
+
+    <select id="mode">
+        <option value="ascii">ASCII Art</option>
+        <option value="ansi">ANSI Art (warna)</option>
+    </select>
+
+    <button onclick="convert()">Generate Art</button>
+    <div class="loader" id="loader">⏳ Processing...</div>
+
+    <textarea id="output" placeholder="Hasil muncul di sini..."></textarea>
+
+    <div class="row">
+        <button class="copy" onclick="copyText()">Copy</button>
+        <button class="export" onclick="exportTXT()">Export TXT</button>
+    </div>
+
+    <button class="logout" onclick="logout()">Logout</button>
+</div>
+
+<canvas id="canvas" hidden></canvas>
+
+<script>
+/* ===== AUTH ===== */
+const users=JSON.parse(localStorage.getItem("fcm_users"))||{};
+function register(){
+    if(!user.value||!pass.value)return alert("Lengkapi data");
+    if(users[user.value])return alert("Username sudah ada");
+    users[user.value]=btoa(pass.value);
+    localStorage.setItem("fcm_users",JSON.stringify(users));
+    alert("Akun dibuat");
+}
+function login(){
+    if(users[user.value]&&atob(users[user.value])===pass.value){
+        localStorage.setItem("fcm_login",user.value);
+        showTools();
+    } else alert("Login gagal");
+}
+function logout(){localStorage.clear();location.reload()}
+function showTools(){loginBox.style.display="none";toolBox.style.display="block"}
+if(localStorage.getItem("fcm_login"))showTools();
+
+/* ===== PREVIEW ===== */
+imgInput.onchange=()=>{
+    const f=imgInput.files[0];
+    if(!f)return;
+    preview.src=URL.createObjectURL(f);
+    preview.style.display="block";
+};
+
+/* ===== CONVERT ===== */
+const chars="@%#*+=-:. ";
+function convert(){
+    const file=imgInput.files[0];
+    if(!file)return alert("Pilih gambar");
+    loader.style.display="block";
+    const img=new Image();
+    img.src=URL.createObjectURL(file);
+    img.onload=()=>{
+        const w=+res.value;
+        const h=Math.floor(w*(img.height/img.width));
+        canvas.width=w;canvas.height=h;
+        const ctx=canvas.getContext("2d");
+        ctx.drawImage(img,0,0,w,h);
+        const d=ctx.getImageData(0,0,w,h).data;
+        let out="";
+        for(let y=0;y<h;y++){
+            for(let x=0;x<w;x++){
+                const i=(y*w+x)*4;
+                const r=d[i],g=d[i+1],b=d[i+2];
+                const br=(r+g+b)/3;
+                const c=chars[Math.floor(br/255*(chars.length-1))];
+                out+=mode.value==="ansi"
+                ?`\x1b[38;2;${r};${g};${b}m${c}\x1b[0m`
+                :c;
+            }
+            out+="\n";
+        }
+        output.value=out;
+        loader.style.display="none";
+    };
+}
+
+/* ===== EXTRA ===== */
+function copyText(){
+    navigator.clipboard.writeText(output.value);
+    alert("Disalin!");
+}
+function exportTXT(){
+    const b=new Blob([output.value],{type:"text/plain"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(b);
+    a.download="fcm-art.txt";
+    a.click();
+}
+</script>
+</body>
+</html>
